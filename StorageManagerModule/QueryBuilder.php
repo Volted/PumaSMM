@@ -85,7 +85,7 @@ class QueryBuilder {
             if (!isset($columns[$this->PrimaryKey]) and $activeTable != $this->PrimaryTable) {
                 $columnsList[] = "`$this->PrimaryKey`";
                 $valuesList[] = '?';
-                $bound[] = $RequestedPrimaryForeign ? [$RequestedPrimaryForeign, 'i'] : Storage::UNIQUE_INTEGER_MAIN_KEY;
+                $bound[] = $RequestedPrimaryForeign ? [$RequestedPrimaryForeign, 'i'] : [Storage::UNIQUE_INTEGER_MAIN_KEY,'i'];
             }
 
             foreach ($columns as $column => $value) {
