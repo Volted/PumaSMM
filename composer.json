@@ -1,0 +1,21 @@
+{
+	"name":              "pumasoft/puma-smm",
+	"description":       "Storage manager module for Puma micro services",
+	"minimum-stability": "stable",
+	"license":           "MIT",
+	"authors":           [
+		{
+			"name":  "George Dryser - Pumasoft",
+			"email": "george.dryser@gmail.com"
+		}
+	],
+	"autoload":          {
+		"psr-4": {
+			"PumaSMM\\": "StorageManagerModule"
+		}
+	},
+	"require":           {
+		"ext-json":   "*",
+		"ext-mysqli": "*"
+	}
+}
