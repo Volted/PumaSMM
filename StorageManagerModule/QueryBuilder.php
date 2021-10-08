@@ -112,6 +112,7 @@ class QueryBuilder {
             'Query' => implode(' ', ['SELECT', $this->RequestedColumns, $this->Condition, $this->Sort, $this->Limit]),
             'Bound' => $this->BoundSearchTerms,
         ];
+        error_log(print_r($result, true));
         $this->_clearCache();
         return $result;
     }
@@ -181,7 +182,7 @@ class QueryBuilder {
             if (is_numeric($column)) {
                 $conditionParts[] = $searchTerm;
             } else {
-                $conditionParts[] = $this->_specifyColumn($column) . "=?$column@";
+                $conditionParts[] = $this->_registerColumn($column) . "=?$column@";
                 $this->BoundSearchTerms['?' . $column . '@'] = [$searchTerm, $this->_getPreparedDataType($column)];
             }
         }
@@ -222,18 +223,17 @@ class QueryBuilder {
      */
     private function _buildSelectFrom(array $propertiesList): void {
         foreach ($propertiesList as $column) {
-            $this->_specifyColumn($column);
+            $this->_registerColumn($column);
         }
         $selectFrom = 'FROM';
         if (count($this->ActiveTables) > 1) {
-            unset($this->ActiveTables[$this->PrimaryTable]);
             $join = [];
-            $this->ActiveColumns[" `$this->PrimaryTable`.`$this->PrimaryKey`"] = true;
             foreach ($this->ActiveTables as $activeTable => $true) {
+                if ($activeTable == $this->PrimaryTable) continue;
                 $join[] = " JOIN `$activeTable` ON `$activeTable`.`$this->PrimaryKey`=`$this->PrimaryTable`.`$this->PrimaryKey`";
-                $this->ActiveColumns[$this->_getTablePrimaryKey($activeTable)] = true;
+                $this->ActiveColumns["`$activeTable`.`$this->PrimaryKey` AS '{$activeTable}_$this->PrimaryKey'"] = true;
             }
-            $selectFrom .= ' `' . $this->PrimaryTable . '` ' . implode(' ', $join);
+            $selectFrom .= " `$this->PrimaryTable` " . implode(' ', $join);
         } else {
             $selectFrom .= ' `' . key($this->ActiveTables) . '`';
         }
@@ -273,33 +273,16 @@ class QueryBuilder {
     /**
      * @throws DataRawr
      */
-    private function _getTablePrimaryKey($table): string {
-        $key = @array_search(Storage::UNIQUE_INTEGER, $this->DataManifest[$table]);
-        if (!$key) {
-            throw new DataRawr("`$table` does not have a unique key", DataRawr::INTERNAL_ERROR);
+    private function _registerColumn($columnName): string {
+        $table = $this->getColumnTable($columnName);
+        $result = "`$table`.`$columnName`";
+        $this->ActiveColumns[$result] = true;
+        $this->ActiveTables[$table] = true;
+        $index = $this->getIndexColumn($table);
+        if ($columnName != $index) {
+            $this->_registerColumn($index);
         }
-        return "`$table`.`$key`";
-
-    }
-
-    /**
-     * @throws DataRawr
-     */
-    private function _specifyColumn($columnName): string {
-        $columnsFound = [];
-        foreach ($this->DataManifest as $table => $columns) {
-            if (isset($this->DataManifest[$table][$columnName])) {
-                $columnsFound[] = "`$table`.`$columnName`";
-                $this->ActiveColumns["`$table`.`$columnName`"] = true;
-                $this->ActiveTables[$table] = true;
-            }
-        }
-        if (count($columnsFound) > 1) {
-            throw new DataRawr("column found in " . count($columnsFound) . " places " . implode(',', $columnsFound), DataRawr::INTERNAL_ERROR);
-        } else if (empty($columnsFound)) {
-            throw new DataRawr("column `$columnName` not found", DataRawr::INTERNAL_ERROR);
-        }
-        return current($columnsFound);
+        return $result;
     }
 
 
@@ -341,8 +324,12 @@ class QueryBuilder {
         foreach ($this->DataManifest as $table => $columnsData) {
             foreach ($columnsData as $column => $type) {
                 if ($column == $this->PrimaryKey) {
-                    $this->ColumnsRelation[$column] = $this->PrimaryTable;
-                    $this->Indexes[$this->PrimaryTable] = $this->PrimaryKey;
+                    if ($table == $this->PrimaryTable) {
+                        $this->ColumnsRelation[$column] = $this->PrimaryTable;
+                        $this->Indexes[$this->PrimaryTable] = $this->PrimaryKey;
+                    } else {
+                        $this->ColumnsRelation[$table . '_' . $column] = $table;
+                    }
                 } else {
                     if (isset($this->ColumnsRelation[$column])) {
                         throw new DataRawr("Conflicting column names found `$column`", DataRawr::INTERNAL_ERROR);
