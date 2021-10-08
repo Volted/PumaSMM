@@ -6,17 +6,14 @@ interface StorageInterface {
 
     /**
      * @param array $propertiesList
-     * @param  $byNameValueList
-     * @param       $sortBy bool|array
-     * @param int   $sortingMethod
+     * @param       $byNameValueList
      * @return array empty array on nothing found
-     *
      */
-    public function read(array $propertiesList, $byNameValueList, $sortBy = false, int $sortingMethod = Storage::SMALL_TO_LARGE): array;
+    public function read(array $propertiesList, $byNameValueList): array;
 
     /**
      * @param array $nameValueArray
-     * @return array returns array of [name => value] of unique ids created for each category
+     * @return array returns array of [table => index] of unique ids created for each category
      * returns empty on failure
      */
     public function create(array $nameValueArray): array;
@@ -34,14 +31,41 @@ interface StorageInterface {
      */
     public function delete(array $nameValueArray): array;
 
-    public function byExactMatch(array $keyValuesArray);
 
-    public function bySimilar(array $keyValuesArray): void;
+    //===================================
+    //----------- Conditions ------------
+    //===================================
+    /**
+     * @param array $keyValuesArray
+     */
+    public function matching(array $keyValuesArray);
 
     /**
      * @param array $keyValuesArray
      */
-    public function byEither(array $keyValuesArray): void;
+    public function featuring(array $keyValuesArray);
 
+    /**
+     * @param array $keyValuesArray
+     */
+    public function startsWith(array $keyValuesArray);
+
+    /**
+     * @param array $keyValuesArray
+     */
+    public function endsWith(array $keyValuesArray);
+
+    /**
+     * @param array $keyValuesArray
+     */
+    public function either(array $keyValuesArray);
+
+
+    //===================================
+    //------------- Sorting -------------
+    //===================================
+    public function sort($column, $method);
+
+    public function limit(int $page, int $ofRecords);
 
 }

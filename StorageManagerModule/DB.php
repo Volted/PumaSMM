@@ -1,4 +1,4 @@
-<?php
+<?php /** @noinspection PhpUnused */
 
 namespace PumaSMM;
 
@@ -6,27 +6,16 @@ use mysqli;
 
 class DB extends Storage {
 
-
-    const CONFIG_INI_FILE = 'CONFIG_INI_FILE';
-    const CONFIG_JSON_FILE = 'CONFIG_JSON_FILE';
-
-    private static $Sorting = [
-        self::SMALL_TO_LARGE => 'ASC',
-        self::LARGE_TO_SMALL => 'DESC',
-    ];
-
-    private $Config;
-    private static $ExpectedConfigEntries = [
+    protected static $ExpectedConfigSection = 'database';
+    protected static $ExpectedConfigEntries = [
         'charset',
         'host',
         'db',
         'username',
         'password',
     ];
-    private static $ExpectedConfigSection = 'database';
 
-
-    private $Manifest;
+    protected $Manifest;
 
     /** @var $QueryBuilder QueryBuilder */
     private $QueryBuilder;
@@ -41,40 +30,6 @@ class DB extends Storage {
         $this->Manifest = $Manifest;
         $this->QueryBuilder = new QueryBuilder($this->Manifest);
         return $this;
-    }
-
-    /**
-     * @throws DataRawr
-     */
-    public function setConfigFromFile($path, $configFileType = self::CONFIG_INI_FILE) {
-        switch ($configFileType) {
-            case self::CONFIG_INI_FILE;
-                $Config = @parse_ini_file($path, true);
-                if (!$Config) {
-                    throw new DataRawr('Failed to parse config ini file', DataRawr::INTERNAL_ERROR);
-                }
-                break;
-            case self::CONFIG_JSON_FILE;
-                $file = @file_get_contents($path);
-                if (!$file) {
-                    throw new DataRawr("config file not found in $path", DataRawr::INTERNAL_ERROR);
-                }
-                $Config = json_decode($file, true);
-                if (json_last_error() !== JSON_ERROR_NONE) {
-                    throw new DataRawr('failed to parse config JSON', DataRawr::INTERNAL_ERROR);
-                }
-                break;
-            default;
-                throw new DataRawr('Must specify config file type', DataRawr::INTERNAL_ERROR);
-        }
-
-        foreach (self::$ExpectedConfigEntries as $entry) {
-            if (!isset($Config[self::$ExpectedConfigSection][$entry])) {
-                throw new DataRawr("Entry '$entry' was not found in config file '" . self::$ExpectedConfigSection . "' section",
-                    DataRawr::INTERNAL_ERROR);
-            }
-            $this->Config[$entry] = $Config[self::$ExpectedConfigSection][$entry];
-        }
     }
 
     /**
@@ -100,15 +55,8 @@ class DB extends Storage {
     /**
      * @throws DataRawr
      */
-    public function read(array $propertiesList, $byNameValueList, $sortBy = false, int $sortingMethod = Storage::SMALL_TO_LARGE): array {
-        $this->QueryBuilder->setMethod(QueryBuilder::SELECT);
-        $this->QueryBuilder->buildSelectFrom($propertiesList);
-        $this->QueryBuilder->buildCondition();
-        $query = $this->QueryBuilder->getQuery();
-        error_log(print_r([
-            'query' => $query,
-            'bound' => $this->QueryBuilder->getBound(),
-        ], true));
+    public function read(array $propertiesList, $byNameValueList): array {
+        error_log(print_r($this->QueryBuilder->getSelectFromQuery($propertiesList), true));
         return [];
     }
 
@@ -116,20 +64,17 @@ class DB extends Storage {
      * @throws DataRawr
      */
     public function create(array $nameValueArray): array {
-        $this->QueryBuilder->setMethod(QueryBuilder::INSERT);
+        $resultTablesInsertedIds = [];
         $queries = $this->QueryBuilder->getInsertIntoQueries($this->Config['db'], $nameValueArray);
-
         $uniqueKey = false;
         foreach ($queries as $table => $queryData) {
-
-
+            $result = $this->_prepareAndExecute($queryData['Query'], $queryData['Bound'], $uniqueKey);
+            if ($this->QueryBuilder->getPrimaryTable() == $table) {
+                $uniqueKey = $result->insert_id;
+            }
+            $resultTablesInsertedIds[$table] = $result->insert_id;
         }
-
-
-        error_log(print_r($queries, true));
-
-        // NANODO: Implement createPropertiesByProperties() method.
-        return [];
+        return $resultTablesInsertedIds;
     }
 
     public function update(array $nameValueArray, array $byNameValueList): array {
@@ -148,18 +93,76 @@ class DB extends Storage {
     /**
      * @throws DataRawr
      */
-    public function byExactMatch(array $keyValuesArray): string {
-        return $this->QueryBuilder->fetchDataMatchingExactly($keyValuesArray);
+    public function matching(array $keyValuesArray): string {
+        return $this->QueryBuilder->setMatching($keyValuesArray);
     }
 
-    public function bySimilar(array $keyValuesArray): void {
+    public function featuring(array $keyValuesArray): void {
         // NANODO: Implement similar() method.
 
     }
 
-    public function byEither(array $keyValuesArray): void {
+    public function either(array $keyValuesArray): void {
         // NANODO: Implement either() method.
 
+    }
+
+    public function startsWith(array $keyValuesArray) {
+        // NANODO: Implement startsWith() method.
+    }
+
+    public function endsWith(array $keyValuesArray) {
+        // NANODO: Implement endsWith() method.
+    }
+
+    //==========================
+    //-------- Sorting ---------
+    //==========================
+    /**
+     * @throws DataRawr
+     */
+    public function sort($column, $method): DB {
+        $this->QueryBuilder->setSort($column, $method);
+        return $this;
+    }
+
+    /**
+     * @throws DataRawr
+     */
+    public function limit(int $page, int $ofRecords): DB {
+        $this->QueryBuilder->setLimit($page, $ofRecords);
+        return $this;
+    }
+
+    //==========================
+    //-------- Utility ---------
+    //==========================
+    /**
+     * @throws DataRawr
+     */
+    private function _prepareAndExecute($query, $binding, $uniqueKey = false) {
+        $types = [];
+        $params = [];
+        foreach ($binding as $bound) {
+            $types[] = $bound[1];
+            if ($bound[0] == Storage::UNIQUE_INTEGER_MAIN_KEY) {
+                if ($uniqueKey) {
+                    $params[] = $uniqueKey;
+                } else {
+                    throw new DataRawr('Unique foreign key requested but is not set', DataRawr::INTERNAL_ERROR);
+                }
+            } else {
+                $params[] = $bound[0];
+            }
+        }
+        $typesString = implode('', $types);
+        $preparedQuery = $this->MySQLi->prepare($query);
+        $preparedQuery->bind_param($typesString, ...$params);
+        if ($preparedQuery->execute()) {
+            return $preparedQuery;
+        } else {
+            throw new DataRawr('failed to execute query "' . $query . '"', DataRawr::INTERNAL_ERROR);
+        }
     }
 
     /**

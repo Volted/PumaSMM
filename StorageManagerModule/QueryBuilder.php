@@ -4,10 +4,10 @@ namespace PumaSMM;
 
 class QueryBuilder {
 
-    const UPDATE = 'UPDATE';
-    const SELECT = 'SELECT';
-    const INSERT = 'INSERT';
-    const DELETE = 'DELETE';
+    private static $SortingTypes = [
+        Storage::SMALL_TO_LARGE => 'ASC',
+        Storage::LARGE_TO_SMALL => 'DESC',
+    ];
 
     private static $DataTypes = [
         Storage::STRING                  => "VARCHAR(255) NOT NULL DEFAULT ''",
@@ -22,17 +22,16 @@ class QueryBuilder {
     ];
 
     private static $PreparedDataTypes = [
-        'i' => [Storage::INTEGER, Storage::UNIQUE_INTEGER_MAIN_KEY, Storage::UNIQUE_INTEGER],
+        'i' => [Storage::INTEGER, Storage::UNIQUE_INTEGER_MAIN_KEY, Storage::UNIQUE_INTEGER, Storage::BOOLEAN],
         'd' => [Storage::FLOAT],
         's' => [Storage::STRING],
         'b' => [Storage::BLOB],
     ];
 
-    private $Method;
     private $RequestedColumns;
     private $Condition;
-    private $LimitOffset;
-    private $Sorting;
+    private $Limit;
+    private $Sort;
 
     private $PrimaryKey;
     private $PrimaryTable;
@@ -48,13 +47,8 @@ class QueryBuilder {
      */
     public function __construct($DataManifest) {
         $this->DataManifest = $DataManifest;
-        $this->_setPrimaryKey();
+        $this->_setPrimaries();
     }
-
-    public function setMethod($Method) {
-        $this->Method = $Method;
-    }
-
 
     /**
      * @throws DataRawr
@@ -85,7 +79,7 @@ class QueryBuilder {
             if (!isset($columns[$this->PrimaryKey]) and $activeTable != $this->PrimaryTable) {
                 $columnsList[] = "`$this->PrimaryKey`";
                 $valuesList[] = '?';
-                $bound[] = $RequestedPrimaryForeign ? [$RequestedPrimaryForeign, 'i'] : [Storage::UNIQUE_INTEGER_MAIN_KEY,'i'];
+                $bound[] = $RequestedPrimaryForeign ? [$RequestedPrimaryForeign, 'i'] : [Storage::UNIQUE_INTEGER_MAIN_KEY, 'i'];
             }
 
             foreach ($columns as $column => $value) {
@@ -104,7 +98,19 @@ class QueryBuilder {
     /**
      * @throws DataRawr
      */
-    public function buildSelectFrom(array $propertiesList): void {
+    public function getSelectFromQuery($propertiesList): array {
+        $this->_buildSelectFrom($propertiesList);
+        $this->_buildCondition();
+        return [
+            'Query' => implode(' ', ['SELECT', $this->RequestedColumns, $this->Condition, $this->Sort, $this->Limit]),
+            'Bound' => $this->BoundSearchTerms,
+        ];
+    }
+
+    /**
+     * @throws DataRawr
+     */
+    private function _buildSelectFrom(array $propertiesList): void {
         foreach ($propertiesList as $column) {
             $this->_specifyColumn($column);
         }
@@ -125,7 +131,7 @@ class QueryBuilder {
         $this->RequestedColumns = $selectOf . ' ' . $selectFrom;
     }
 
-    public function buildCondition(): void {
+    private function _buildCondition(): void {
         $Bound = [];
         $condition = $this->Condition;
         foreach ($this->BoundSearchTerms as $term => $value) {
@@ -138,18 +144,10 @@ class QueryBuilder {
         $this->BoundSearchTerms = $Bound;
     }
 
-    public function getQuery(): string {
-        return implode(' ', [$this->Method, $this->RequestedColumns, $this->Condition, $this->LimitOffset, $this->Sorting]);
-    }
-
-    public function getBound(): array {
-        return $this->BoundSearchTerms;
-    }
-
     /**
      * @throws DataRawr
      */
-    private function _setPrimaryKey(): void {
+    private function _setPrimaries(): void {
         foreach ($this->DataManifest as $table => $columns) {
             foreach ($columns as $column => $type) {
                 if ($type == Storage::UNIQUE_INTEGER_MAIN_KEY) {
@@ -163,9 +161,16 @@ class QueryBuilder {
     }
 
     /**
+     * @return mixed
+     */
+    public function getPrimaryTable() {
+        return $this->PrimaryTable;
+    }
+
+    /**
      * @throws DataRawr
      */
-    public function fetchDataMatchingExactly(array $keyValuesArray): string {
+    public function setMatching(array $keyValuesArray): string {
         $conditionParts = [];
         foreach ($keyValuesArray as $column => $searchTerm) {
             if (is_numeric($column)) {
@@ -252,6 +257,31 @@ class QueryBuilder {
             }
         }
         return 's';
+    }
+
+    /**
+     * @throws DataRawr
+     */
+    public function setLimit($page, $ofRecords) {
+        if ($page > 0) {
+            $offset = ($page - 1) * $ofRecords;
+            $this->Limit = "LIMIT $offset,$ofRecords";
+            return;
+        }
+        throw new DataRawr("page number must be greater then 0", DataRawr::INTERNAL_ERROR);
+    }
+
+    /**
+     * @throws DataRawr
+     */
+    public function setSort($column, $method) {
+        foreach ($this->DataManifest as $table) {
+            if (isset($table[$column])) {
+                $this->Sort = "ORDER BY `$table`.`$column` " . self::$SortingTypes[$method];
+                return;
+            }
+        }
+        throw new DataRawr("column `$column` was requested for sorting was not found in manifest", DataRawr::INTERNAL_ERROR);
     }
 
 
