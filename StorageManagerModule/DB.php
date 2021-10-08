@@ -59,11 +59,16 @@ class DB extends Storage {
         $query = $this->QueryBuilder->getSelectFromQuery($propertiesList);
         $result = ($this->_prepareAndExecute($query['Query'], $query['Bound']))->get_result();
         if ($result->num_rows > 0) {
+            $resultSet = [];
             while ($row = $result->fetch_assoc()) {
-                error_log(print_r($row, true));
+                foreach ($row as $column => $value) {
+                    $table = $this->QueryBuilder->getColumnTable($column);
+                    $index = $this->QueryBuilder->getIndexColumn($table);
+                    $resultSet[$table][$row[$index]][$column] = $value;
+                }
             }
+            return $resultSet;
         }
-
         return [];
     }
 

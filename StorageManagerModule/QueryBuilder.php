@@ -34,6 +34,7 @@ class QueryBuilder {
 
     // columns relation
     private $ColumnsRelation = [];
+    private $Indexes = [];
 
     // cache
     private $RequestedColumns;
@@ -142,6 +143,17 @@ class QueryBuilder {
     //=================================================
     //--------------- PUBLIC UTILITY ------------------
     //=================================================
+    /**
+     * @throws DataRawr
+     */
+    public function getIndexColumn($table) {
+        if (isset($this->Indexes[$table])) {
+            return $this->Indexes[$table];
+        } else {
+            throw new DataRawr("`$table` index was not found", DataRawr::INTERNAL_ERROR);
+        }
+    }
+
     /**
      * @throws DataRawr
      */
@@ -330,11 +342,15 @@ class QueryBuilder {
             foreach ($columnsData as $column => $type) {
                 if ($column == $this->PrimaryKey) {
                     $this->ColumnsRelation[$column] = $this->PrimaryTable;
+                    $this->Indexes[$this->PrimaryTable] = $this->PrimaryKey;
                 } else {
                     if (isset($this->ColumnsRelation[$column])) {
                         throw new DataRawr("Conflicting column names found `$column`", DataRawr::INTERNAL_ERROR);
                     }
                     $this->ColumnsRelation[$column] = $table;
+                    if ($type == Storage::UNIQUE_INTEGER) {
+                        $this->Indexes[$table] = $column;
+                    }
                 }
             }
         }
