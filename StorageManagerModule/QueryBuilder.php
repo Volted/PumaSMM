@@ -112,7 +112,6 @@ class QueryBuilder {
             'Query' => implode(' ', ['SELECT', $this->RequestedColumns, $this->Condition, $this->Sort, $this->Limit]),
             'Bound' => $this->BoundSearchTerms,
         ];
-        error_log(print_r($result, true));
         $this->_clearCache();
         return $result;
     }
