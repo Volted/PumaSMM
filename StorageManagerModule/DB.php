@@ -157,7 +157,7 @@ class DB extends Storage {
         $params = [];
         foreach ($binding as $bound) {
             $types[] = $bound[1];
-            if ($bound[0] == Storage::UNIQUE_INTEGER_MAIN_KEY) {
+            if ($bound[0] === Storage::UNIQUE_INTEGER_MAIN_KEY) {
                 if ($uniqueKey) {
                     $params[] = $uniqueKey;
                 } else {
