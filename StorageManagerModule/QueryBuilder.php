@@ -28,16 +28,15 @@ class QueryBuilder {
         'b' => [Storage::BLOB],
     ];
 
-    private $RequestedColumns;
-    private $Condition;
-    private $Limit;
-    private $Sort;
-
     private $PrimaryKey;
     private $PrimaryTable;
     private $DataManifest;
 
-
+    // cache
+    private $RequestedColumns;
+    private $Condition;
+    private $Limit;
+    private $Sort;
     private $ActiveTables;
     private $ActiveColumns;
     private $BoundSearchTerms;
@@ -49,7 +48,9 @@ class QueryBuilder {
         $this->DataManifest = $DataManifest;
         $this->_setPrimaries();
     }
-
+    //=================================================
+    //------------------- QUERIES ---------------------
+    //=================================================
     /**
      * @throws DataRawr
      */
@@ -92,6 +93,7 @@ class QueryBuilder {
             $tableQueries[$activeTable]['Query'] = "INSERT INTO `$db`.`$activeTable` ($columnsList) VALUES ($valuesList)";
             $tableQueries[$activeTable]['Bound'] = $bound;
         }
+        $this->_clearCache();
         return $tableQueries;
     }
 
@@ -101,11 +103,97 @@ class QueryBuilder {
     public function getSelectFromQuery($propertiesList): array {
         $this->_buildSelectFrom($propertiesList);
         $this->_buildCondition();
-        return [
+        $result = [
             'Query' => implode(' ', ['SELECT', $this->RequestedColumns, $this->Condition, $this->Sort, $this->Limit]),
             'Bound' => $this->BoundSearchTerms,
         ];
+        $this->_clearCache();
+        return $result;
     }
+
+    /**
+     * @throws DataRawr
+     */
+    public function getCreateTablesFromManifestQuery($db): string {
+        $tablesQuery = [];
+        foreach ($this->DataManifest as $table => $columns) {
+            $columnsQuery = [];
+            $primaryKey = '';
+            foreach ($columns as $column => $type) {
+                $columnsQuery[] = "`$column` " . $this->_getSQLDataType($type);
+                if ($type == Storage::UNIQUE_INTEGER or $type == Storage::UNIQUE_INTEGER_MAIN_KEY) {
+                    $primaryKey = "PRIMARY KEY (`$column`)";
+                }
+            }
+            if (!$primaryKey) {
+                throw new DataRawr("primary key not specified for table `$table`", DataRawr::INTERNAL_ERROR);
+            }
+            $columnsQuery[] = $primaryKey;
+            $clm = implode(' , ', $columnsQuery);
+            $tablesQuery[] = "CREATE TABLE `$db`.`$table` ($clm) ENGINE = InnoDB";
+        }
+        return implode("; \n", $tablesQuery);
+    }
+
+    //=================================================
+    //--------------- PUBLIC UTILITY ------------------
+    //=================================================
+    /**
+     * @return mixed
+     */
+    public function getPrimaryTable() {
+        return $this->PrimaryTable;
+    }
+
+    /**
+     * @throws DataRawr
+     */
+    public function setMatching(array $keyValuesArray): string {
+        $conditionParts = [];
+        foreach ($keyValuesArray as $column => $searchTerm) {
+            if (is_numeric($column)) {
+                $conditionParts[] = $searchTerm;
+            } else {
+                $conditionParts[] = $this->_specifyColumn($column) . "=?$column@";
+                $this->BoundSearchTerms['?' . $column . '@'] = [$searchTerm, $this->_getPreparedDataType($column)];
+            }
+        }
+        $result = "(" . implode(" AND ", $conditionParts) . ")";
+        $this->Condition = $result;
+        return $result;
+    }
+
+
+    /**
+     * @throws DataRawr
+     */
+    public function setLimit($page, $ofRecords) {
+        if ($page > 0) {
+            $offset = ($page - 1) * $ofRecords;
+            $this->Limit = "LIMIT $offset,$ofRecords";
+            return;
+        }
+        throw new DataRawr("page number must be greater then 0", DataRawr::INTERNAL_ERROR);
+    }
+
+    /**
+     * @throws DataRawr
+     */
+    public function setSort($column, $method) {
+        foreach ($this->DataManifest as $table=>$tData) {
+            if (isset($tData[$column])) {
+                $this->Sort = "ORDER BY `$table`.`$column` " . self::$SortingTypes[$method];
+                $this->ActiveColumns["`$table`.`$column`"] = true;
+                $this->ActiveTables[$table] = true;
+                return;
+            }
+        }
+        throw new DataRawr("column `$column` was requested for sorting, but was not found in manifest", DataRawr::INTERNAL_ERROR);
+    }
+
+    //=================================================
+    //--------------- PRIVATE UTILITY -----------------
+    //=================================================
 
     /**
      * @throws DataRawr
@@ -161,35 +249,10 @@ class QueryBuilder {
     }
 
     /**
-     * @return mixed
-     */
-    public function getPrimaryTable() {
-        return $this->PrimaryTable;
-    }
-
-    /**
-     * @throws DataRawr
-     */
-    public function setMatching(array $keyValuesArray): string {
-        $conditionParts = [];
-        foreach ($keyValuesArray as $column => $searchTerm) {
-            if (is_numeric($column)) {
-                $conditionParts[] = $searchTerm;
-            } else {
-                $conditionParts[] = $this->_specifyColumn($column) . "=?$column@";
-                $this->BoundSearchTerms['?' . $column . '@'] = [$searchTerm, $this->_getPreparedDataType($column)];
-            }
-        }
-        $result = "(" . implode(" AND ", $conditionParts) . ")";
-        $this->Condition = $result;
-        return $result;
-    }
-
-    /**
      * @throws DataRawr
      */
     private function _getTablePrimaryKey($table): string {
-        $key = array_search(Storage::UNIQUE_INTEGER, $this->DataManifest[$table]);
+        $key = @array_search(Storage::UNIQUE_INTEGER, $this->DataManifest[$table]);
         if (!$key) {
             throw new DataRawr("`$table` does not have a unique key", DataRawr::INTERNAL_ERROR);
         }
@@ -222,30 +285,6 @@ class QueryBuilder {
         return self::$DataTypes[$type] ?? '__UNKNOWN__';
     }
 
-    /**
-     * @throws DataRawr
-     */
-    public function getCreateTablesFromManifestQuery($db): string {
-        $tablesQuery = [];
-        foreach ($this->DataManifest as $table => $columns) {
-            $columnsQuery = [];
-            $primaryKey = '';
-            foreach ($columns as $column => $type) {
-                $columnsQuery[] = "`$column` " . $this->_getSQLDataType($type);
-                if ($type == Storage::UNIQUE_INTEGER or $type == Storage::UNIQUE_INTEGER_MAIN_KEY) {
-                    $primaryKey = "PRIMARY KEY (`$column`)";
-                }
-            }
-            if (!$primaryKey) {
-                throw new DataRawr("primary key not specified for table `$table`", DataRawr::INTERNAL_ERROR);
-            }
-            $columnsQuery[] = $primaryKey;
-            $clm = implode(' , ', $columnsQuery);
-            $tablesQuery[] = "CREATE TABLE `$db`.`$table` ($clm) ENGINE = InnoDB";
-        }
-        return implode("; \n", $tablesQuery);
-    }
-
     private function _getPreparedDataType($column): string {
         foreach ($this->DataManifest as $columns) {
             if (isset($columns[$column])) {
@@ -259,29 +298,18 @@ class QueryBuilder {
         return 's';
     }
 
-    /**
-     * @throws DataRawr
-     */
-    public function setLimit($page, $ofRecords) {
-        if ($page > 0) {
-            $offset = ($page - 1) * $ofRecords;
-            $this->Limit = "LIMIT $offset,$ofRecords";
-            return;
+    private function _clearCache() {
+        foreach ([
+                     'RequestedColumns',
+                     'Condition',
+                     'Limit',
+                     'Sort',
+                     'ActiveTables',
+                     'ActiveColumns',
+                     'BoundSearchTerms',
+                 ] as $property) {
+            $this->$property = NULL;
         }
-        throw new DataRawr("page number must be greater then 0", DataRawr::INTERNAL_ERROR);
-    }
-
-    /**
-     * @throws DataRawr
-     */
-    public function setSort($column, $method) {
-        foreach ($this->DataManifest as $table) {
-            if (isset($table[$column])) {
-                $this->Sort = "ORDER BY `$table`.`$column` " . self::$SortingTypes[$method];
-                return;
-            }
-        }
-        throw new DataRawr("column `$column` was requested for sorting was not found in manifest", DataRawr::INTERNAL_ERROR);
     }
 
 
