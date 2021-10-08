@@ -32,6 +32,9 @@ class QueryBuilder {
     private $PrimaryTable;
     private $DataManifest;
 
+    // columns relation
+    private $ColumnsRelation = [];
+
     // cache
     private $RequestedColumns;
     private $Condition;
@@ -47,6 +50,7 @@ class QueryBuilder {
     public function __construct($DataManifest) {
         $this->DataManifest = $DataManifest;
         $this->_setPrimaries();
+        $this->_setColumnsRelations();
     }
     //=================================================
     //------------------- QUERIES ---------------------
@@ -139,6 +143,17 @@ class QueryBuilder {
     //--------------- PUBLIC UTILITY ------------------
     //=================================================
     /**
+     * @throws DataRawr
+     */
+    public function getColumnTable($column) {
+        if (isset($this->ColumnsRelation[$column])) {
+            return $this->ColumnsRelation[$column];
+        } else {
+            throw new DataRawr("column `$column` was not found in manifest", DataRawr::INTERNAL_ERROR);
+        }
+    }
+
+    /**
      * @return mixed
      */
     public function getPrimaryTable() {
@@ -180,15 +195,10 @@ class QueryBuilder {
      * @throws DataRawr
      */
     public function setSort($column, $method) {
-        foreach ($this->DataManifest as $table=>$tData) {
-            if (isset($tData[$column])) {
-                $this->Sort = "ORDER BY `$table`.`$column` " . self::$SortingTypes[$method];
-                $this->ActiveColumns["`$table`.`$column`"] = true;
-                $this->ActiveTables[$table] = true;
-                return;
-            }
-        }
-        throw new DataRawr("column `$column` was requested for sorting, but was not found in manifest", DataRawr::INTERNAL_ERROR);
+        $table = $this->getColumnTable($column);
+        $this->Sort = "ORDER BY `$table`.`$column` " . self::$SortingTypes[$method];
+        $this->ActiveColumns["`$table`.`$column`"] = true;
+        $this->ActiveTables[$table] = true;
     }
 
     //=================================================
@@ -309,6 +319,24 @@ class QueryBuilder {
                      'BoundSearchTerms',
                  ] as $property) {
             $this->$property = NULL;
+        }
+    }
+
+    /**
+     * @throws DataRawr
+     */
+    private function _setColumnsRelations() {
+        foreach ($this->DataManifest as $table => $columnsData) {
+            foreach ($columnsData as $column => $type) {
+                if ($column == $this->PrimaryKey) {
+                    $this->ColumnsRelation[$column] = $this->PrimaryTable;
+                } else {
+                    if (isset($this->ColumnsRelation[$column])) {
+                        throw new DataRawr("Conflicting column names found `$column`", DataRawr::INTERNAL_ERROR);
+                    }
+                    $this->ColumnsRelation[$column] = $table;
+                }
+            }
         }
     }
 

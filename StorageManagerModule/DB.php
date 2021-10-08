@@ -56,7 +56,14 @@ class DB extends Storage {
      * @throws DataRawr
      */
     public function read(array $propertiesList, $byNameValueList): array {
-        error_log(print_r($this->QueryBuilder->getSelectFromQuery($propertiesList), true));
+        $query = $this->QueryBuilder->getSelectFromQuery($propertiesList);
+        $result = ($this->_prepareAndExecute($query['Query'], $query['Bound']))->get_result();
+        if ($result->num_rows > 0) {
+            while ($row = $result->fetch_assoc()) {
+                error_log(print_r($row, true));
+            }
+        }
+
         return [];
     }
 
