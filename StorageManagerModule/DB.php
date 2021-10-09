@@ -22,6 +22,7 @@ class DB extends Storage {
 
     /** @var $MySQLi mysqli */
     private $MySQLi;
+    private $EnableLogs = false;
 
     /**
      * @throws DataRawr
@@ -30,6 +31,11 @@ class DB extends Storage {
         $this->Manifest = $Manifest;
         $this->QueryBuilder = new QueryBuilder($this->Manifest);
         return $this;
+    }
+
+
+    public function enableLogs(): void {
+        $this->EnableLogs = true;
     }
 
     /**
@@ -153,6 +159,12 @@ class DB extends Storage {
      * @throws DataRawr
      */
     private function _prepareAndExecute($query, $binding, $uniqueKey = false) {
+        if ($this->EnableLogs) {
+            error_log(print_r([
+                'Query'   => $query,
+                'Binding' => $binding,
+            ], true));
+        }
         $types = [];
         $params = [];
         foreach ($binding as $bound) {
