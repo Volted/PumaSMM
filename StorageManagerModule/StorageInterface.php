@@ -35,31 +35,10 @@ interface StorageInterface {
     //===================================
     //----------- Conditions ------------
     //===================================
-    /**
-     * @param array $keyValuesArray
-     */
-    public function matching(array $keyValuesArray);
-
-    /**
-     * @param array $keyValuesArray
-     */
-    public function featuring(array $keyValuesArray);
-
-    /**
-     * @param array $keyValuesArray
-     */
-    public function startsWith(array $keyValuesArray);
-
-    /**
-     * @param array $keyValuesArray
-     */
-    public function endsWith(array $keyValuesArray);
-
-    /**
-     * @param array $keyValuesArray
-     */
-    public function either(array $keyValuesArray);
-
+    public function matching(string $condition, $keyValuesArray);
+    public function featuring(string $condition, $keyValuesArray);
+    public function startsWith(string $condition, $keyValuesArray);
+    public function endsWith(string $condition, $keyValuesArray);
 
     //===================================
     //------------- Sorting -------------

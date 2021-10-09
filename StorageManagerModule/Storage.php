@@ -12,6 +12,9 @@ abstract class Storage implements StorageInterface {
     const DATE_TIME = 'DATE_TIME';
     const FLOAT = 'FLOAT';
     const BLOB = 'BLOB';
+    // conditions
+    const AND = 'AND';
+    const OR = 'OR';
 
     const SMALL_TO_LARGE = 1;
     const LARGE_TO_SMALL = 2;
@@ -24,9 +27,11 @@ abstract class Storage implements StorageInterface {
     protected static $ExpectedConfigEntries = [];
     protected static $ExpectedConfigSection;
 
-    public function connect() {}
+    public function connect() {
+    }
 
-    public function closeConnection() {}
+    public function closeConnection() {
+    }
 
     /**
      * @throws DataRawr

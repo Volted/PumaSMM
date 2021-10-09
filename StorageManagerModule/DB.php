@@ -111,25 +111,22 @@ class DB extends Storage {
     /**
      * @throws DataRawr
      */
-    public function matching(array $keyValuesArray): string {
-        return $this->QueryBuilder->setMatching($keyValuesArray);
+    public function matching(string $condition, $keyValuesArray): string {
+        return $this->QueryBuilder->setCondition(QueryBuilder::CONDITION_MATCHING, $condition, $keyValuesArray);
     }
 
-    public function featuring(array $keyValuesArray): void {
-        // NANODO: Implement similar() method.
-
+    /**
+     * @throws DataRawr
+     */
+    public function featuring(string $condition, $keyValuesArray): string {
+        return $this->QueryBuilder->setCondition(QueryBuilder::CONDITION_FEATURING, $condition, $keyValuesArray);
     }
 
-    public function either(array $keyValuesArray): void {
-        // NANODO: Implement either() method.
-
-    }
-
-    public function startsWith(array $keyValuesArray) {
+    public function startsWith(string $condition, $keyValuesArray) {
         // NANODO: Implement startsWith() method.
     }
 
-    public function endsWith(array $keyValuesArray) {
+    public function endsWith(string $condition, $keyValuesArray) {
         // NANODO: Implement endsWith() method.
     }
 

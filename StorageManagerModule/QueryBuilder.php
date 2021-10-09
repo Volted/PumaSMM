@@ -4,6 +4,10 @@ namespace PumaSMM;
 
 class QueryBuilder {
 
+
+    const CONDITION_MATCHING = 1;
+    const CONDITION_FEATURING = 2;
+
     private static $SortingTypes = [
         Storage::SMALL_TO_LARGE => 'ASC',
         Storage::LARGE_TO_SMALL => 'DESC',
@@ -44,6 +48,7 @@ class QueryBuilder {
     private $ActiveTables;
     private $ActiveColumns;
     private $BoundSearchTerms;
+    private $BoundingIndex;
 
     /**
      * @throws DataRawr
@@ -175,17 +180,30 @@ class QueryBuilder {
     /**
      * @throws DataRawr
      */
-    public function setMatching(array $keyValuesArray): string {
+    public function setCondition(int $type, string $condition, $keyValuesArray): string {
+        $this->BoundingIndex = ($this->BoundingIndex === NULL) ? 0 : $this->BoundingIndex;
+        $this->BoundingIndex++;
         $conditionParts = [];
         foreach ($keyValuesArray as $column => $searchTerm) {
             if (is_numeric($column)) {
                 $conditionParts[] = $searchTerm;
             } else {
-                $conditionParts[] = $this->_registerColumn($column) . "=?$column@";
-                $this->BoundSearchTerms['?' . $column . '@'] = [$searchTerm, $this->_getPreparedDataType($column)];
+                switch ($type) {
+                    case self::CONDITION_MATCHING;
+                        $operator = '=';
+                        break;
+                    case self::CONDITION_FEATURING;
+                        $operator = ' LIKE ';
+                        $searchTerm = "%$searchTerm%";
+                        break;
+                    default;
+                        $operator = '=';
+                }
+                $conditionParts[] = $this->_registerColumn($column) . "$operator?$this->BoundingIndex$column@";
+                $this->BoundSearchTerms['?' . $this->BoundingIndex . $column . '@'] = [$searchTerm, $this->_getPreparedDataType($column)];
             }
         }
-        $result = "(" . implode(" AND ", $conditionParts) . ")";
+        $result = "(" . implode(" $condition ", $conditionParts) . ")";
         $this->Condition = $result;
         return $result;
     }
@@ -307,6 +325,7 @@ class QueryBuilder {
                      'RequestedColumns',
                      'Condition',
                      'Limit',
+                     'BoundingIndex',
                      'Sort',
                      'ActiveTables',
                      'ActiveColumns',
