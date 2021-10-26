@@ -44,7 +44,6 @@ interface StorageInterface {
     //------------- Sorting -------------
     //===================================
     public function sort($column, $method);
-
     public function limit(int $page, int $ofRecords);
 
 }
