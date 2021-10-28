@@ -12,15 +12,18 @@ abstract class Storage implements StorageInterface {
     const DATE_TIME = 'DATE_TIME';
     const FLOAT = 'FLOAT';
     const BLOB = 'BLOB';
+
     // conditions
     const AND = 'AND';
     const OR = 'OR';
 
+    // acceptable date format
+    const FORMAT_DATETIME = 'Y-m-d H:i:s';
+    const FORMAT_TIME = 'H:i:s';
+    const FORMAT_DATE = 'Y-m-d';
+
     const SMALL_TO_LARGE = 1;
     const LARGE_TO_SMALL = 2;
-
-    const CONFIG_INI_FILE = 'CONFIG_INI_FILE';
-    const CONFIG_JSON_FILE = 'CONFIG_JSON_FILE';
 
     protected $Config;
 
@@ -36,26 +39,27 @@ abstract class Storage implements StorageInterface {
     /**
      * @throws DataRawr
      */
-    public function setConfigFromFile($path, $configFileType = self::CONFIG_INI_FILE) {
-        switch ($configFileType) {
-            case self::CONFIG_INI_FILE;
-                $Config = @parse_ini_file($path, true);
+    public function setConfig($file) {
+        $ext = pathinfo($file)['extension'] ?? '';
+        switch ($ext) {
+            case 'ini';
+                $Config = @parse_ini_file($file, true);
                 if (!$Config) {
                     throw new DataRawr('Failed to parse config ini file', DataRawr::INTERNAL_ERROR);
                 }
                 break;
-            case self::CONFIG_JSON_FILE;
-                $file = @file_get_contents($path);
-                if (!$file) {
-                    throw new DataRawr("config file not found in $path", DataRawr::INTERNAL_ERROR);
+            case 'json';
+                $contents = @file_get_contents($file);
+                if (!$contents) {
+                    throw new DataRawr("config file not found in $file", DataRawr::INTERNAL_ERROR);
                 }
-                $Config = json_decode($file, true);
+                $Config = json_decode($contents, true);
                 if (json_last_error() !== JSON_ERROR_NONE) {
                     throw new DataRawr('failed to parse config JSON', DataRawr::INTERNAL_ERROR);
                 }
                 break;
             default;
-                throw new DataRawr('Must specify config file type', DataRawr::INTERNAL_ERROR);
+                throw new DataRawr('Config file type not supported', DataRawr::INTERNAL_ERROR);
         }
 
         foreach (static::$ExpectedConfigEntries as $entry) {

@@ -41,15 +41,16 @@ class QueryBuilder {
     private $Indexes = [];
 
     // cache
-    private $RequestedColumns;
-    private $Condition;
-    private $Limit;
-    private $Sort;
-    private $ActiveTables;
-    private $ActiveColumns;
-    private $BoundSearchTerms;
-    private $BoundingIndex;
-
+    private $Cache = [
+        'RequestedColumns' => NULL,
+        'Condition'        => NULL,
+        'Limit'            => NULL,
+        'Sort'             => NULL,
+        'ActiveTables'     => NULL,
+        'ActiveColumns'    => NULL,
+        'BoundSearchTerms' => NULL,
+        'BoundingIndex'    => NULL,
+    ];
     /**
      * @throws DataRawr
      */
@@ -114,8 +115,8 @@ class QueryBuilder {
         $this->_buildSelectFrom($propertiesList);
         $this->_buildCondition();
         $result = [
-            'Query' => implode(' ', ['SELECT', $this->RequestedColumns, $this->Condition, $this->Sort, $this->Limit]),
-            'Bound' => $this->BoundSearchTerms,
+            'Query' => implode(' ', ['SELECT', $this->Cache['RequestedColumns'], $this->Cache['Condition'], $this->Cache['Sort'], $this->Cache['Limit']]),
+            'Bound' => $this->Cache['BoundSearchTerms'],
         ];
         $this->_clearCache();
         return $result;
@@ -181,8 +182,8 @@ class QueryBuilder {
      * @throws DataRawr
      */
     public function setCondition(int $type, string $condition, $keyValuesArray): string {
-        $this->BoundingIndex = ($this->BoundingIndex === NULL) ? 0 : $this->BoundingIndex;
-        $this->BoundingIndex++;
+        $this->Cache['BoundingIndex'] = ($this->Cache['BoundingIndex'] === NULL) ? 0 : $this->Cache['BoundingIndex'];
+        $this->Cache['BoundingIndex']++;
         $conditionParts = [];
         foreach ($keyValuesArray as $column => $searchTerm) {
             if (is_numeric($column)) {
@@ -199,12 +200,12 @@ class QueryBuilder {
                     default;
                         $operator = '=';
                 }
-                $conditionParts[] = $this->_registerColumn($column) . "$operator?$this->BoundingIndex$column@";
-                $this->BoundSearchTerms['?' . $this->BoundingIndex . $column . '@'] = [$searchTerm, $this->_getPreparedDataType($column)];
+                $conditionParts[] = $this->_registerColumn($column) . "$operator?".$this->Cache['BoundingIndex']."$column@";
+                $this->Cache['BoundSearchTerms']['?' . $this->Cache['BoundingIndex'] . $column . '@'] = [$searchTerm, $this->_getPreparedDataType($column)];
             }
         }
         $result = "(" . implode(" $condition ", $conditionParts) . ")";
-        $this->Condition = $result;
+        $this->Cache['Condition'] = $result;
         return $result;
     }
 
@@ -215,7 +216,7 @@ class QueryBuilder {
     public function setLimit($page, $ofRecords) {
         if ($page > 0) {
             $offset = ($page - 1) * $ofRecords;
-            $this->Limit = "LIMIT $offset,$ofRecords";
+            $this->Cache['Limit'] = "LIMIT $offset,$ofRecords";
             return;
         }
         throw new DataRawr("page number must be greater then 0", DataRawr::INTERNAL_ERROR);
@@ -226,9 +227,9 @@ class QueryBuilder {
      */
     public function setSort($column, $method) {
         $table = $this->getColumnTable($column);
-        $this->Sort = "ORDER BY `$table`.`$column` " . self::$SortingTypes[$method];
-        $this->ActiveColumns["`$table`.`$column`"] = true;
-        $this->ActiveTables[$table] = true;
+        $this->Cache['Sort'] = "ORDER BY `$table`.`$column` " . self::$SortingTypes[$method];
+        $this->Cache['ActiveColumns']["`$table`.`$column`"] = true;
+        $this->Cache['ActiveTables'][$table] = true;
     }
 
     //=================================================
@@ -243,32 +244,32 @@ class QueryBuilder {
             $this->_registerColumn($column);
         }
         $selectFrom = 'FROM';
-        if (count($this->ActiveTables) > 1) {
+        if (count($this->Cache['ActiveTables']) > 1) {
             $join = [];
-            foreach ($this->ActiveTables as $activeTable => $true) {
+            foreach ($this->Cache['ActiveTables'] as $activeTable => $true) {
                 if ($activeTable == $this->PrimaryTable) continue;
                 $join[] = " JOIN `$activeTable` ON `$activeTable`.`$this->PrimaryKey`=`$this->PrimaryTable`.`$this->PrimaryKey`";
-                $this->ActiveColumns["`$activeTable`.`$this->PrimaryKey` AS '{$activeTable}_$this->PrimaryKey'"] = true;
+                $this->Cache['ActiveColumns']["`$activeTable`.`$this->PrimaryKey` AS '{$activeTable}_$this->PrimaryKey'"] = true;
             }
             $selectFrom .= " `$this->PrimaryTable` " . implode(' ', $join);
         } else {
-            $selectFrom .= ' `' . key($this->ActiveTables) . '`';
+            $selectFrom .= ' `' . key($this->Cache['ActiveTables']) . '`';
         }
-        $selectOf = implode(',', array_keys($this->ActiveColumns));
-        $this->RequestedColumns = $selectOf . ' ' . $selectFrom;
+        $selectOf = implode(',', array_keys($this->Cache['ActiveColumns']));
+        $this->Cache['RequestedColumns'] = $selectOf . ' ' . $selectFrom;
     }
 
     private function _buildCondition(): void {
         $Bound = [];
-        $condition = $this->Condition;
-        foreach ($this->BoundSearchTerms as $term => $value) {
+        $condition = $this->Cache['Condition'];
+        foreach ($this->Cache['BoundSearchTerms'] as $term => $value) {
             $position = strpos($condition, $term);
             $Bound[$position] = $value;
-            $this->Condition = str_replace($term, '?', $this->Condition);
+            $this->Cache['Condition'] = str_replace($term, '?', $this->Cache['Condition']);
         }
-        $this->Condition = 'WHERE ' . $this->Condition;
+        $this->Cache['Condition'] = 'WHERE ' . $this->Cache['Condition'];
         ksort($Bound);
-        $this->BoundSearchTerms = $Bound;
+        $this->Cache['BoundSearchTerms'] = $Bound;
     }
 
     /**
@@ -293,8 +294,8 @@ class QueryBuilder {
     private function _registerColumn($columnName): string {
         $table = $this->getColumnTable($columnName);
         $result = "`$table`.`$columnName`";
-        $this->ActiveColumns[$result] = true;
-        $this->ActiveTables[$table] = true;
+        $this->Cache['ActiveColumns'][$result] = true;
+        $this->Cache['ActiveTables'][$table] = true;
         $index = $this->getIndexColumn($table);
         if ($columnName != $index) {
             $this->_registerColumn($index);
@@ -321,17 +322,8 @@ class QueryBuilder {
     }
 
     private function _clearCache() {
-        foreach ([
-                     'RequestedColumns',
-                     'Condition',
-                     'Limit',
-                     'BoundingIndex',
-                     'Sort',
-                     'ActiveTables',
-                     'ActiveColumns',
-                     'BoundSearchTerms',
-                 ] as $property) {
-            $this->$property = NULL;
+        foreach ($this->Cache as $item => $value) {
+            $this->Cache[$item] = NULL;
         }
     }
 
