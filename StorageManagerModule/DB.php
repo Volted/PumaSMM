@@ -64,14 +64,16 @@ class DB extends Storage {
     public function read(array $propertiesList, $byNameValueList): array {
         $query = $this->QueryBuilder->getSelectFromQuery($propertiesList);
         $result = ($this->_prepareAndExecute($query['Query'], $query['Bound']))->get_result();
+        $record = 0;
         if ($result->num_rows > 0) {
             $resultSet = [];
             while ($row = $result->fetch_assoc()) {
                 foreach ($row as $column => $value) {
-                    $table = $this->QueryBuilder->getColumnTable($column);
-                    $index = $this->QueryBuilder->getIndexColumn($table);
-                    $resultSet[$table][$row[$index]][$column] = $value;
+                    if(in_array($column,$propertiesList)){
+                        $resultSet[$record][$column] = $value;
+                    }
                 }
+                $record++;
             }
             return $resultSet;
         }
