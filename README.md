@@ -471,3 +471,6 @@ This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) f
 ## Contributing
 
 Contributions are welcome! Please feel free to submit issues and pull requests.
+
+## Important
+This is a personal side project developed independently in my own time, using my own equipment and resources. It has no connection to any employer, client, or commercial work.
