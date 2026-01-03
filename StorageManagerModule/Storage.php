@@ -25,10 +25,10 @@ abstract class Storage implements StorageInterface {
     const SMALL_TO_LARGE = 1;
     const LARGE_TO_SMALL = 2;
 
-    protected $Config;
+    protected array $Config;
 
-    protected static $ExpectedConfigEntries = [];
-    protected static $ExpectedConfigSection;
+    protected static array $ExpectedConfigEntries = [];
+    protected static string $ExpectedConfigSection;
 
     public function connect() {
     }
@@ -39,7 +39,7 @@ abstract class Storage implements StorageInterface {
     /**
      * @throws DataRawr
      */
-    public function setConfig($file) {
+    public function setConfig($file): void {
         $ext = pathinfo($file)['extension'] ?? '';
         switch ($ext) {
             case 'ini';

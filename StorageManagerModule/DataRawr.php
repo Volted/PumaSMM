@@ -3,6 +3,7 @@
 namespace PumaSMM;
 
 use Exception;
+use JetBrains\PhpStorm\NoReturn;
 
 class DataRawr extends Exception {
 
@@ -14,7 +15,7 @@ class DataRawr extends Exception {
     const BAD_REQUEST = 400;
 
 
-    private static $Manifest = [
+    private static array $Manifest = [
         self::INTERNAL_ERROR     => ['error' => 'server error'],
         self::METHOD_NOT_ALLOWED => ['error' => 'method not allowed'],
         self::NOT_FOUND          => ['error' => 'not found'],
@@ -24,13 +25,13 @@ class DataRawr extends Exception {
     ];
 
 
-    public function handleException() {
+    #[NoReturn]
+    public function handleException(): void {
         $this->_logError();
         $this->_sendResponse();
-        exit();
     }
 
-    private function _logError() {
+    private function _logError(): void {
         $errorData['ErrorCode'] = $this->getCode();
         $errorData['Message'] = $this->getMessage();
         $errorData['InFile'] = $this->getFile();
@@ -45,7 +46,8 @@ class DataRawr extends Exception {
         error_log(print_r($errorData, true));
     }
 
-    private function _sendResponse() {
+    #[NoReturn]
+    private function _sendResponse(): void {
         http_response_code($this->getCode());
         header("Content-Type:application/json");
         exit(json_encode(self::$Manifest[$this->getCode()] ?? []));

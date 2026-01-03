@@ -7,13 +7,15 @@ class QueryBuilder {
 
     const CONDITION_MATCHING = 1;
     const CONDITION_FEATURING = 2;
+    const CONDITION_STARTS_WITH = 3;
+    const CONDITION_ENDS_WITH = 4;
 
-    private static $SortingTypes = [
+    private static array $SortingTypes = [
         Storage::SMALL_TO_LARGE => 'ASC',
         Storage::LARGE_TO_SMALL => 'DESC',
     ];
 
-    private static $DataTypes = [
+    private static array $DataTypes = [
         Storage::STRING                  => "VARCHAR(255) NOT NULL DEFAULT ''",
         Storage::INTEGER                 => "INT NOT NULL DEFAULT '0'",
         Storage::UNIQUE_INTEGER          => "INT NOT NULL AUTO_INCREMENT",
@@ -25,23 +27,23 @@ class QueryBuilder {
         Storage::BLOB                    => "BLOB NOT NULL DEFAULT ''",
     ];
 
-    private static $PreparedDataTypes = [
+    private static array $PreparedDataTypes = [
         'i' => [Storage::INTEGER, Storage::UNIQUE_INTEGER_MAIN_KEY, Storage::UNIQUE_INTEGER, Storage::BOOLEAN],
         'd' => [Storage::FLOAT],
         's' => [Storage::STRING],
         'b' => [Storage::BLOB],
     ];
 
-    private $PrimaryKey;
-    private $PrimaryTable;
-    private $DataManifest;
+    private string $PrimaryKey;
+    private string $PrimaryTable;
+    private array $DataManifest;
 
     // columns relation
-    private $ColumnsRelation = [];
-    private $Indexes = [];
+    private array $ColumnsRelation = [];
+    private array $Indexes = [];
 
     // cache
-    private $Cache = [
+    private array $Cache = [
         'RequestedColumns' => NULL,
         'Condition'        => NULL,
         'Limit'            => NULL,
@@ -59,9 +61,44 @@ class QueryBuilder {
         $this->_setPrimaries();
         $this->_setColumnsRelations();
     }
-    //=================================================
-    //------------------- QUERIES ---------------------
-    //=================================================
+
+    public function getUpdateQueries($nameValueArray): array {
+        $RequestedTables = [];
+        foreach ($this->DataManifest as $table => $columns) {
+            foreach ($nameValueArray as $columnName => $value) {
+                if ($columnName == $this->PrimaryKey) {
+                    continue;
+                }
+                if (isset($columns[$columnName])) {
+                    $RequestedTables[$table][$columnName] = $value;
+                }
+            }
+        }
+
+        $tableQueries = [];
+        foreach ($RequestedTables as $activeTable => $columns) {
+            $bound = [];
+            $setList = [];
+
+            foreach ($columns as $column => $value) {
+                $bound[] = [$value, $this->_getPreparedDataType($column)];
+                $setList[] = "`$column` = ?";
+            }
+
+            // Append condition bindings
+            foreach ($this->Cache['BoundSearchTerms'] as $value) {
+                $bound[] = $value;
+            }
+
+            $condition = str_replace(array_keys($this->Cache['BoundSearchTerms'] ?? []), '?', $this->Cache['Condition']);
+            $setClause = implode(', ', $setList);
+            $tableQueries[$activeTable]['Query'] = "UPDATE `$activeTable` SET $setClause WHERE $condition";
+            $tableQueries[$activeTable]['Bound'] = $bound;
+        }
+        $this->_clearCache();
+        return $tableQueries;
+    }
+
     /**
      * @throws DataRawr
      */
@@ -171,10 +208,7 @@ class QueryBuilder {
         }
     }
 
-    /**
-     * @return mixed
-     */
-    public function getPrimaryTable() {
+    public function getPrimaryTable(): string {
         return $this->PrimaryTable;
     }
 
@@ -197,6 +231,14 @@ class QueryBuilder {
                         $operator = ' LIKE ';
                         $searchTerm = "%$searchTerm%";
                         break;
+                    case self::CONDITION_STARTS_WITH;
+                        $operator = ' LIKE ';
+                        $searchTerm = "$searchTerm%";
+                        break;
+                    case self::CONDITION_ENDS_WITH;
+                        $operator = ' LIKE ';
+                        $searchTerm = "%$searchTerm";
+                        break;
                     default;
                         $operator = '=';
                 }
@@ -213,7 +255,7 @@ class QueryBuilder {
     /**
      * @throws DataRawr
      */
-    public function setLimit($page, $ofRecords) {
+    public function setLimit($page, $ofRecords): void {
         if ($page > 0) {
             $offset = ($page - 1) * $ofRecords;
             $this->Cache['Limit'] = "LIMIT $offset,$ofRecords";
@@ -225,7 +267,7 @@ class QueryBuilder {
     /**
      * @throws DataRawr
      */
-    public function setSort($column, $method) {
+    public function setSort($column, $method): void {
         $table = $this->getColumnTable($column);
         $this->Cache['Sort'] = "ORDER BY `$table`.`$column` " . self::$SortingTypes[$method];
         $this->Cache['ActiveColumns']["`$table`.`$column`"] = true;
@@ -321,7 +363,7 @@ class QueryBuilder {
         return 's';
     }
 
-    private function _clearCache() {
+    private function _clearCache(): void {
         foreach ($this->Cache as $item => $value) {
             $this->Cache[$item] = NULL;
         }
@@ -330,7 +372,7 @@ class QueryBuilder {
     /**
      * @throws DataRawr
      */
-    private function _setColumnsRelations() {
+    private function _setColumnsRelations(): void {
         foreach ($this->DataManifest as $table => $columnsData) {
             foreach ($columnsData as $column => $type) {
                 if ($column == $this->PrimaryKey) {
@@ -351,6 +393,41 @@ class QueryBuilder {
                 }
             }
         }
+    }
+
+    public function getDeleteQueries(array $nameValueArray): array {
+        $RequestedTables = [];
+        foreach ($this->DataManifest as $table => $columns) {
+            foreach ($nameValueArray as $columnName => $value) {
+                if (isset($columns[$columnName])) {
+                    $RequestedTables[$table] = true;
+                    break;
+                }
+            }
+        }
+
+        // If no specific tables found, use tables from the condition
+        if (empty($RequestedTables) && !empty($this->Cache['Condition'])) {
+            foreach ($this->Cache['ActiveTables'] ?? [] as $table => $active) {
+                $RequestedTables[$table] = true;
+            }
+        }
+
+        $tableQueries = [];
+        foreach ($RequestedTables as $activeTable => $true) {
+            $bound = [];
+
+            // Append condition bindings
+            foreach ($this->Cache['BoundSearchTerms'] ?? [] as $value) {
+                $bound[] = $value;
+            }
+
+            $condition = str_replace(array_keys($this->Cache['BoundSearchTerms'] ?? []), '?', $this->Cache['Condition']);
+            $tableQueries[$activeTable]['Query'] = "DELETE FROM `$activeTable` WHERE $condition";
+            $tableQueries[$activeTable]['Bound'] = $bound;
+        }
+        $this->_clearCache();
+        return $tableQueries;
     }
 
 

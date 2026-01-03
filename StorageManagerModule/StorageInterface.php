@@ -13,7 +13,7 @@ interface StorageInterface {
 
     /**
      * @param array $nameValueArray
-     * @return array returns array of [table => index] of unique ids created for each category
+     * @return array returns an array of [table => index] of unique ids created for each category
      * returns empty on failure
      */
     public function create(array $nameValueArray): array;
@@ -21,7 +21,7 @@ interface StorageInterface {
     /**
      * @param array $nameValueArray
      * @param array $byNameValueList
-     * @return array returns array of unique Ids in updated categories
+     * @return array returns an array of unique Ids in updated categories
      * returns empty on nothing updated
      */
     public function update(array $nameValueArray, array $byNameValueList): array;

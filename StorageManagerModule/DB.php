@@ -1,13 +1,14 @@
-<?php /** @noinspection PhpUnused */
+<?php
 
 namespace PumaSMM;
 
 use mysqli;
+use mysqli_stmt;
 
 class DB extends Storage {
 
-    protected static $ExpectedConfigSection = 'database';
-    protected static $ExpectedConfigEntries = [
+    protected static string $ExpectedConfigSection = 'database';
+    protected static array $ExpectedConfigEntries = [
         'charset',
         'host',
         'db',
@@ -15,14 +16,10 @@ class DB extends Storage {
         'password',
     ];
 
-    protected $Manifest;
-
-    /** @var $QueryBuilder QueryBuilder */
-    private $QueryBuilder;
-
-    /** @var $MySQLi mysqli */
-    private $MySQLi;
-    private $EnableLogs = false;
+    protected string $Manifest;
+    private QueryBuilder $QueryBuilder;
+    private mysqli $MySQLi;
+    private bool $EnableLogs = false;
 
     /**
      * @throws DataRawr
@@ -41,7 +38,7 @@ class DB extends Storage {
     /**
      * @throws DataRawr
      */
-    public function connect() {
+    public function connect(): void {
         list($charset, $host, $db, $username, $password) = array_values($this->Config);
         mysqli_report(MYSQLI_REPORT_OFF);
         $this->MySQLi = new mysqli($host, $username, $password, $db);
@@ -54,7 +51,7 @@ class DB extends Storage {
         }
     }
 
-    public function closeConnection() {
+    public function closeConnection(): void {
         $this->MySQLi->close();
     }
 
@@ -97,14 +94,30 @@ class DB extends Storage {
         return $resultTablesInsertedIds;
     }
 
+    /**
+     * @throws DataRawr
+     */
     public function update(array $nameValueArray, array $byNameValueList): array {
-        // NANODO: Implement updatePropertiesByProperties() method.
-        return [];
+        $resultTablesAffectedRows = [];
+        $queries = $this->QueryBuilder->getUpdateQueries($nameValueArray);
+        foreach ($queries as $table => $queryData) {
+            $result = $this->_prepareAndExecute($queryData['Query'], $queryData['Bound']);
+            $resultTablesAffectedRows[$table] = $result->affected_rows;
+        }
+        return $resultTablesAffectedRows;
     }
 
+    /**
+     * @throws DataRawr
+     */
     public function delete(array $nameValueArray): array {
-        // NANODO: Implement deletePropertiesByProperties() method.
-        return [];
+        $resultTablesAffectedRows = [];
+        $queries = $this->QueryBuilder->getDeleteQueries($nameValueArray);
+        foreach ($queries as $table => $queryData) {
+            $result = $this->_prepareAndExecute($queryData['Query'], $queryData['Bound']);
+            $resultTablesAffectedRows[$table] = $result->affected_rows;
+        }
+        return $resultTablesAffectedRows;
     }
 
     //==========================
@@ -123,18 +136,19 @@ class DB extends Storage {
     public function featuring(string $condition, $keyValuesArray): string {
         return $this->QueryBuilder->setCondition(QueryBuilder::CONDITION_FEATURING, $condition, $keyValuesArray);
     }
-
-    public function startsWith(string $condition, $keyValuesArray) {
-        // NANODO: Implement startsWith() method.
+    /**
+     * @throws DataRawr
+     */
+    public function startsWith(string $condition, $keyValuesArray): string {
+        return $this->QueryBuilder->setCondition(QueryBuilder::CONDITION_STARTS_WITH, $condition, $keyValuesArray);
+    }
+    /**
+     * @throws DataRawr
+     */
+    public function endsWith(string $condition, $keyValuesArray): string {
+        return $this->QueryBuilder->setCondition(QueryBuilder::CONDITION_ENDS_WITH, $condition, $keyValuesArray);
     }
 
-    public function endsWith(string $condition, $keyValuesArray) {
-        // NANODO: Implement endsWith() method.
-    }
-
-    //==========================
-    //-------- Sorting ---------
-    //==========================
     /**
      * @throws DataRawr
      */
@@ -157,7 +171,7 @@ class DB extends Storage {
     /**
      * @throws DataRawr
      */
-    private function _prepareAndExecute($query, $binding, $uniqueKey = false) {
+    private function _prepareAndExecute($query, $binding, $uniqueKey = false): false|mysqli_stmt {
         if ($this->EnableLogs) {
             error_log(print_r([
                 'Query'   => $query,
@@ -191,7 +205,7 @@ class DB extends Storage {
     /**
      * @throws DataRawr
      */
-    public function createTablesFromManifest() {
+    public function createTablesFromManifest(): void {
         $query = $this->QueryBuilder->getCreateTablesFromManifestQuery($this->Config['db']);
         $this->MySQLi->multi_query($query);
         if ($this->MySQLi->errno) {
